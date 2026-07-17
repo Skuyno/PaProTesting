@@ -38,6 +38,8 @@ class Operation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    attempt_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class OperationEvent(Base):
