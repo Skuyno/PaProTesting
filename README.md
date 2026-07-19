@@ -122,10 +122,12 @@ poetry run alembic upgrade head
 poetry run uvicorn app.main:app --port 8080
 ```
 
-Линтер:
+Линтер и тесты (тестам нужен запущенный контейнер `db` — тестовая база
+`payments_test` создаётся автоматически):
 
 ```bash
-poetry run ruff check app
+poetry run ruff check app tests
+poetry run pytest
 ```
 
 <!--описание коммитов-->
