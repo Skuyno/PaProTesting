@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,8 +42,6 @@ async def get_operation(
 ) -> OperationResponse:
     """Return the current state of an operation."""
     op = await repository.get_operation(db, operation_id)
-    if op is None:
-        raise HTTPException(status_code=404, detail="Operation not found")
     return OperationResponse.model_validate(op)
 
 
@@ -54,6 +52,16 @@ async def list_events(
 ) -> list[EventResponse]:
     """Return the transition history of an operation."""
     op_events = await repository.list_events(db, operation_id)
-    if not op_events:
-        raise HTTPException(status_code=404, detail="Operation not found")
     return [EventResponse.model_validate(e) for e in op_events]
+
+
+@router.post("/operations/{operation_id}/submit", response_model=OperationResponse)
+async def submit_operation(
+    operation_id: str,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+) -> OperationResponse:
+    """Reliably schedule an operation for submission to the provider."""
+    op, created = await repository.try_submit(db, operation_id)
+    response.status_code = 202 if created else 200
+    return OperationResponse.model_validate(op)

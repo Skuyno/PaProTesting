@@ -53,3 +53,14 @@ class EventResponse(BaseModel):
     to_status: OperationStatus
     message: str | None
     occurred_at: datetime
+
+
+class ProviderPaymentResponse(BaseModel):
+    """Provider response to a payment creation request."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, from_attributes=True
+    )
+
+    provider_payment_id: str
+    status: str

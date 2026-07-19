@@ -15,6 +15,12 @@ class Settings(BaseSettings):
 
     provider_url: str = "http://localhost:8081"
 
+    worker_poll_interval: float = 1.0
+    worker_batch_size: int = 10
+    worker_lease_seconds: int = 30
+    worker_backoff_base: float = 0.5
+    worker_backoff_cap: float = 15.0
+
     @property
     def database_url(self) -> str:
         """Return the assembled database url."""
