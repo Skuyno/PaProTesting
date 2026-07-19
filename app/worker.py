@@ -9,6 +9,7 @@ from app import repository
 from app.config import get_settings
 from app.database import async_session_maker
 from app.exceptions import ProviderUnavailableError
+from app.metrics import dispatch_attempts
 from app.models import Operation
 from app.provider import ProviderClient
 
@@ -41,6 +42,7 @@ async def process_operation(provider: ProviderClient, op: Operation) -> None:
                     op.operation_id, f"{op.amount:.2f}", op.currency
                 )
             except ProviderUnavailableError as exc:
+                dispatch_attempts.labels(result="unavailable").inc()
                 delay = backoff_delay(op.attempt_count)
                 scheduled = await repository.schedule_retry(db, op.operation_id, delay)
                 if scheduled:
@@ -53,6 +55,7 @@ async def process_operation(provider: ProviderClient, op: Operation) -> None:
                         delay,
                     )
             else:
+                dispatch_attempts.labels(result="accepted").inc()
                 stored = await repository.save_provider_payment_id(
                     db, op.operation_id, resp.provider_payment_id
                 )
@@ -74,6 +77,7 @@ async def process_operation(provider: ProviderClient, op: Operation) -> None:
                         resp.provider_payment_id,
                     )
     except Exception:
+        dispatch_attempts.labels(result="unexpected").inc()
         logger.exception(
             "operation=%s attempt=%d unexpected dispatch error",
             op.operation_id,

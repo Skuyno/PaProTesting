@@ -87,6 +87,13 @@ curl -i -X POST http://localhost:8080/operations \
   несовпадающий `providerPaymentId` — 409.
 - После рестарта воркер сам подбирает незавершённые `PROCESSING`-операции.
 
+<!--Метрики-->
+## Метрики
+
+`GET /metrics` — метрики Prometheus: количество операций по статусам
+(`payment_operations`) и попытки отправки провайдеру по исходам
+(`payment_dispatch_attempts_total`).
+
 <!--Конфигурация-->
 ## Конфигурация
 

@@ -187,6 +187,14 @@ async def schedule_retry(
     return result.rowcount == 1
 
 
+async def count_operations_by_status(db: AsyncSession) -> dict[str, int]:
+    """Return the number of operations per status."""
+    result = await db.execute(
+        select(Operation.status, func.count()).group_by(Operation.status)
+    )
+    return dict(result.all())
+
+
 async def apply_receipt(db: AsyncSession, receipt: ReceiptIn) -> str:
     """Apply a provider receipt to its operation in one transaction.
 

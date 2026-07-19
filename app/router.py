@@ -4,11 +4,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import repository
 from app.dependencies import get_async_db
+from app.metrics import operations_by_status
+from app.models import OperationStatus
 from app.schemas import EventResponse, OperationCreate, OperationResponse, ReceiptIn
 
 router = APIRouter()
@@ -74,3 +77,12 @@ async def receive_receipt(
 ) -> None:
     """Accept a provider callback receipt."""
     await repository.apply_receipt(db, receipt)
+
+
+@router.get("/metrics")
+async def metrics(db: Annotated[AsyncSession, Depends(get_async_db)]) -> Response:
+    """Return Prometheus metrics in the text exposition format."""
+    counts = await repository.count_operations_by_status(db)
+    for status in OperationStatus:
+        operations_by_status.labels(status=status.value).set(counts.get(status, 0))
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
