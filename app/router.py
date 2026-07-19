@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import repository
 from app.dependencies import get_async_db
-from app.schemas import EventResponse, OperationCreate, OperationResponse
+from app.schemas import EventResponse, OperationCreate, OperationResponse, ReceiptIn
 
 router = APIRouter()
 
@@ -65,3 +65,12 @@ async def submit_operation(
     op, created = await repository.try_submit(db, operation_id)
     response.status_code = 202 if created else 200
     return OperationResponse.model_validate(op)
+
+
+@router.post("/receipts", status_code=204)
+async def receive_receipt(
+    receipt: ReceiptIn,
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+) -> None:
+    """Accept a provider callback receipt."""
+    await repository.apply_receipt(db, receipt)

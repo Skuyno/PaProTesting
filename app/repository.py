@@ -7,9 +7,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import OperationAlreadyExistsError, OperationNotFoundError
+from app.exceptions import (
+    OperationAlreadyExistsError,
+    OperationNotFoundError,
+    ReceiptConflictError,
+)
 from app.models import Operation, OperationEvent, OperationStatus
-from app.schemas import OperationCreate
+from app.schemas import OperationCreate, ReceiptIn
 
 
 async def create_operation(db: AsyncSession, data: OperationCreate) -> Operation:
@@ -84,11 +88,7 @@ async def try_submit(db: AsyncSession, operation_id: str) -> tuple[Operation, bo
         .values(status=OperationStatus.PROCESSING, next_attempt_at=func.now())
     )
     if result.rowcount == 1:
-        next_event_id = await db.scalar(
-            select(func.max(OperationEvent.event_id) + 1).where(
-                OperationEvent.operation_id == operation_id
-            )
-        )
+        next_event_id = await _next_event_id(db, operation_id)
         db.add(
             OperationEvent(
                 operation_id=operation_id,
@@ -185,3 +185,78 @@ async def schedule_retry(
     )
     await db.commit()
     return result.rowcount == 1
+
+
+async def apply_receipt(db: AsyncSession, receipt: ReceiptIn) -> str:
+    """Apply a provider receipt to its operation in one transaction.
+
+    Returns:
+        How the receipt was handled: "applied", "duplicate" or "ignored".
+
+    Raises:
+        OperationNotFoundError: If the operation does not exist.
+        ReceiptConflictError: If the receipt contradicts the stored
+            provider payment id.
+    """
+    result = await db.execute(
+        select(Operation)
+        .where(Operation.operation_id == receipt.operation_id)
+        .with_for_update()
+    )
+    op = result.scalar_one_or_none()
+    if op is None:
+        raise OperationNotFoundError(receipt.operation_id)
+
+    if op.provider_payment_id is None:
+        op.provider_payment_id = receipt.provider_payment_id
+    elif op.provider_payment_id != receipt.provider_payment_id:
+        stored_pid = op.provider_payment_id
+        await db.rollback()
+        raise ReceiptConflictError(
+            f"operation {receipt.operation_id}: receipt provider_payment_id "
+            f"{receipt.provider_payment_id} does not match stored {stored_pid}"
+        )
+
+
+    new_status = OperationStatus(receipt.result)
+    if op.status in (OperationStatus.COMPLETED, OperationStatus.REJECTED):
+        if op.status == new_status:
+            outcome = "duplicate"
+        else:
+            db.add(
+                OperationEvent(
+                    operation_id=op.operation_id,
+                    event_id=await _next_event_id(db, op.operation_id),
+                    type="RECEIPT_IGNORED",
+                    from_status=op.status,
+                    to_status=op.status,
+                    message=f"Ignored late receipt with result {receipt.result}",
+                )
+            )
+            outcome = "ignored"
+    else:
+        db.add(
+            OperationEvent(
+                operation_id=op.operation_id,
+                event_id=await _next_event_id(db, op.operation_id),
+                type=receipt.result,
+                from_status=op.status,
+                to_status=new_status,
+                message=receipt.message,
+            )
+        )
+        op.status = new_status
+        op.next_attempt_at = None
+        outcome = "applied"
+
+    await db.commit()
+    return outcome
+
+
+async def _next_event_id(db: AsyncSession, operation_id: str) -> int:
+    """Return the next event id. Caller must hold the operation row lock."""
+    return await db.scalar(
+        select(func.max(OperationEvent.event_id) + 1).where(
+            OperationEvent.operation_id == operation_id
+        )
+    )

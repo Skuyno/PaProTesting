@@ -1,5 +1,4 @@
 """Application entry point."""
-
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -7,7 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.exceptions import OperationAlreadyExistsError, OperationNotFoundError
+from app.exceptions import (
+    OperationAlreadyExistsError,
+    OperationNotFoundError,
+    ReceiptConflictError,
+)
 from app.provider import ProviderClient
 from app.router import router
 from app.worker import run_worker
@@ -47,3 +50,11 @@ async def operation_not_found_handler(
 ) -> JSONResponse:
     """Map missing operations to 404 not found."""
     return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(ReceiptConflictError)
+async def receipt_conflict_handler(
+    request: Request, exc: ReceiptConflictError
+) -> JSONResponse:
+    """Map contradicting receipts to 409 Conflict."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})

@@ -64,3 +64,15 @@ class ProviderPaymentResponse(BaseModel):
 
     provider_payment_id: str
     status: str
+
+
+class ReceiptIn(BaseModel):
+    """Callback receipt delivered by the provider."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    provider_payment_id: str = Field(min_length=1, max_length=64)
+    operation_id: str = Field(min_length=1, max_length=255)
+    result: Literal["COMPLETED", "REJECTED"]
+    message: str | None = Field(default=None, max_length=1024)
+    occurred_at: datetime

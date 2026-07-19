@@ -45,7 +45,8 @@ async def process_operation(provider: ProviderClient, op: Operation) -> None:
                 scheduled = await repository.schedule_retry(db, op.operation_id, delay)
                 if scheduled:
                     logger.warning(
-                        "operation=%s attempt=%d provider unavailable (%s), retry in %.1fs",
+                        "operation=%s attempt=%d provider unavailable (%s), "
+                        "retry in %.1fs",
                         op.operation_id,
                         op.attempt_count,
                         exc,
@@ -57,14 +58,15 @@ async def process_operation(provider: ProviderClient, op: Operation) -> None:
                 )
                 if stored == resp.provider_payment_id:
                     logger.info(
-                        "operation=%s attempt=%d provider accepted, provider_payment_id=%s",
+                        "operation=%s attempt=%d provider accepted, "
+                        "provider_payment_id=%s",
                         op.operation_id,
                         op.attempt_count,
                         resp.provider_payment_id,
                     )
                 else:
                     logger.error(
-                        "operation=%s attempt=%d provider_payment_id mismatch: " \
+                        "operation=%s attempt=%d provider_payment_id mismatch: "
                         "stored=%s received=%s",
                         op.operation_id,
                         op.attempt_count,
