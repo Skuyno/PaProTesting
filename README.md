@@ -72,6 +72,42 @@ curl -i -X POST http://localhost:8080/operations \
   -d '{"operationId":"op-1","amount":"1000.00","currency":"RUB"}'
 ```
 
+<!--Схема данных-->
+## Схема данных
+
+```mermaid
+erDiagram
+    OPERATIONS ||--o{ OPERATION_EVENTS : operation_id
+
+    OPERATIONS {
+        string operation_id PK
+        numeric amount
+        string currency
+        string description
+        string status
+        string provider_payment_id UK "write-once: из ответа провайдера или квитанции"
+        timestamptz created_at
+        timestamptz updated_at
+        int attempt_count
+        timestamptz next_attempt_at "NULL, next или lease — расписание диспетчера"
+    }
+
+    OPERATION_EVENTS {
+        string operation_id PK,FK
+        int event_id PK "монотонный в пределах операции"
+        string type
+        string from_status
+        string to_status
+        string message
+        timestamptz occurred_at
+    }
+```
+
+`operation_events` использует композитный первичный ключ `(operation_id, event_id)` —
+история переходов растёт только вставкой, ничего в ней не меняется задним числом.
+Оба потока записи в `provider_payment_id` (ответ провайдера и квитанция) — условные
+`UPDATE ... WHERE provider_payment_id IS NULL`, поэтому поле честно write-once.
+
 <!--Как обеспечивается инвариант-->
 ## Как обеспечивается инвариант
 
