@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the database
+        run: docker compose up -d --wait db
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Lint
+        run: poetry run ruff check app tests
+
+      - name: Apply migrations
+        run: poetry run alembic upgrade head
+
+      - name: Run tests
+        run: poetry run pytest
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  docker-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose up --build -d
+
+      - name: Wait for the service to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health; then exit 0; fi
+            sleep 2
+          done
+          echo "candidate-service did not become healthy in time" >&2
+          exit 1
+
+      - name: Run the end-to-end scenario from the README
+        run: |
+          set -e
+
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/operations \
+            -H "Content-Type: application/json" \
+            -d '{"operationId":"ci-op-1","amount":"1000.00","currency":"RUB","description":"CI run"}')
+          [ "$status" = "201" ] || { echo "create: expected 201, got $status"; exit 1; }
+
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/operations/ci-op-1/submit)
+          [ "$status" = "202" ] || { echo "submit: expected 202, got $status"; exit 1; }
+
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/operations \
+            -H "Content-Type: application/json" \
+            -d '{"operationId":"ci-op-1","amount":"1000.00","currency":"RUB"}')
+          [ "$status" = "409" ] || { echo "duplicate create: expected 409, got $status"; exit 1; }
+
+          sleep 3
+
+          body=$(curl -s http://localhost:8080/operations/ci-op-1)
+          echo "$body" | grep -q '"status":"COMPLETED"' || { echo "operation did not complete: $body"; exit 1; }
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
