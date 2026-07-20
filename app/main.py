@@ -17,7 +17,7 @@ from app.worker import run_worker
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    format="%(asctime)s %(levelname)s [pid=%(process)d] %(name)s: %(message)s",
 )
 
 @asynccontextmanager

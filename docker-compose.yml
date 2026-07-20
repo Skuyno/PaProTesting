@@ -33,6 +33,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
       POSTGRES_DB: ${POSTGRES_DB:-payments}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
     ports:
       - "8080:8080"
     depends_on:
